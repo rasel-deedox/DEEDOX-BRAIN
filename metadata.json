@@ -1,0 +1,6 @@
+{
+  "name": "AI Library",
+  "description": "Offline-first personal knowledge library with local FTS5 search, SAF file references, optional cloud sync, and AI organization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

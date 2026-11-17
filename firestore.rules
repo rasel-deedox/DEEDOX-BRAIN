@@ -1,0 +1,1661 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny all reads and writes by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidContentType(value) {
+      return value in ['link', 'video', 'github', 'article', 'document', 'image', 'note', 'local_file'];
+    }
+
+    function isValidSourceType(value) {
+      return value in ['youtube', 'github', 'web', 'saf_file', 'photo_picker', 'note', 'share_intent', 'manual'];
+    }
+
+    function isValidItemStatus(value) {
+      return value in ['unsorted', 'processing', 'needs_review', 'failed_metadata', 'duplicate_candidate', 'organized', 'archived'];
+    }
+
+    function isValidThemeMode(value) {
+      return value in ['LIGHT', 'DARK', 'DIM', 'NIGHT'];
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.displayName is string &&
+             data.displayName.size() >= 1 &&
+             data.displayName.size() <= 120 &&
+             data.cloudSyncEnabled is bool &&
+             (!('themeMode' in data) || (data.themeMode is string && isValidThemeMode(data.themeMode))) &&
+             (!('accentPreset' in data) || (data.accentPreset is string && data.accentPreset.size() <= 64)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidAdminVaultConfig(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.aiProvider is string &&
+             data.aiProvider in ['firebase_ai', 'openrouter'] &&
+             (!('openRouterApiKey' in data) || data.openRouterApiKey == null || (data.openRouterApiKey is string && data.openRouterApiKey.size() <= 512)) &&
+             (!('openRouterModel' in data) || data.openRouterModel == null || (data.openRouterModel is string && data.openRouterModel.size() <= 160)) &&
+             (!('supabaseUrl' in data) || data.supabaseUrl == null || (data.supabaseUrl is string && data.supabaseUrl.size() <= 512)) &&
+             (!('supabaseAnonKey' in data) || data.supabaseAnonKey == null || (data.supabaseAnonKey is string && data.supabaseAnonKey.size() <= 1024)) &&
+             (!('customCredentialsJson' in data) || data.customCredentialsJson == null || (data.customCredentialsJson is string && data.customCredentialsJson.size() <= 8000)) &&
+             (!('adminPasscodeHash' in data) || data.adminPasscodeHash == null || (data.adminPasscodeHash is string && data.adminPasscodeHash.size() <= 128)) &&
+             (!('adminPasscodeSalt' in data) || data.adminPasscodeSalt == null || (data.adminPasscodeSalt is string && data.adminPasscodeSalt.size() <= 64)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isVerifiedPrimaryAdmin() {
+      return isSignedIn() &&
+             ('email_verified' in request.auth.token) &&
+             request.auth.token.email_verified == true &&
+             ('email' in request.auth.token) &&
+             request.auth.token.email == 'deedox.lab@gmail.com';
+    }
+
+    function isValidGlobalAiConfig(data) {
+      return data.adminUid is string &&
+             data.adminUid.size() >= 1 &&
+             data.adminUid.size() <= 128 &&
+             data.aiProvider is string &&
+             data.aiProvider in ['firebase_ai', 'openrouter'] &&
+             (!('openRouterApiKey' in data) || data.openRouterApiKey == null || (data.openRouterApiKey is string && data.openRouterApiKey.size() <= 512)) &&
+             (!('openRouterModel' in data) || data.openRouterModel == null || (data.openRouterModel is string && data.openRouterModel.size() <= 160)) &&
+             (!('supabaseUrl' in data) || data.supabaseUrl == null || (data.supabaseUrl is string && data.supabaseUrl.size() <= 512)) &&
+             (!('supabaseAnonKey' in data) || data.supabaseAnonKey == null || (data.supabaseAnonKey is string && data.supabaseAnonKey.size() <= 1024)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidDeviceSession(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.deviceName is string &&
+             data.deviceName.size() >= 1 &&
+             data.deviceName.size() <= 120 &&
+             data.platform is string &&
+             data.platform in ['android', 'web', 'desktop'] &&
+             data.status is string &&
+             data.status in ['online', 'idle'] &&
+             data.lastSeenAt is timestamp &&
+             data.lastSeenAt <= request.time;
+    }
+
+    function isValidDeviceTransfer(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 300 &&
+             data.payloadText is string &&
+             data.payloadText.size() >= 1 &&
+             data.payloadText.size() <= 10000 &&
+             data.payloadType is string &&
+             data.payloadType in ['link', 'note', 'file_ref'] &&
+             data.fromDeviceName is string &&
+             data.fromDeviceName.size() >= 1 &&
+             data.fromDeviceName.size() <= 120 &&
+             (!('targetDeviceId' in data) || data.targetDeviceId == null || (data.targetDeviceId is string && data.targetDeviceId.size() <= 128)) &&
+             data.status is string &&
+             data.status in ['pending', 'received'] &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidCloudReview(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             (!('itemId' in data) || data.itemId == null || (data.itemId is string && data.itemId.size() <= 128)) &&
+             data.authorName is string &&
+             data.authorName.size() >= 1 &&
+             data.authorName.size() <= 120 &&
+             data.rating is int &&
+             data.rating >= 1 &&
+             data.rating <= 5 &&
+             data.body is string &&
+             data.body.size() >= 1 &&
+             data.body.size() <= 2000 &&
+             data.helpfulCount is int &&
+             data.helpfulCount >= 0 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidCloudLibraryItem(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 500 &&
+             (!('description' in data) || data.description == null || (data.description is string && data.description.size() <= 4000)) &&
+             (!('originalUrl' in data) || data.originalUrl == null || (data.originalUrl is string && data.originalUrl.size() <= 2048)) &&
+             (!('canonicalUrl' in data) || data.canonicalUrl == null || (data.canonicalUrl is string && data.canonicalUrl.size() <= 2048)) &&
+             (!('domain' in data) || data.domain == null || (data.domain is string && data.domain.size() <= 255)) &&
+             data.contentType is string &&
+             isValidContentType(data.contentType) &&
+             data.sourceType is string &&
+             isValidSourceType(data.sourceType) &&
+             (!('thumbnailUrl' in data) || data.thumbnailUrl == null || (data.thumbnailUrl is string && data.thumbnailUrl.size() <= 2048)) &&
+             data.isFavorite is bool &&
+             data.status is string &&
+             isValidItemStatus(data.status) &&
+             data.folderIds is list &&
+             data.folderIds.size() <= 25 &&
+             (data.folderIds.size() == 0 || data.folderIds[0] is string) &&
+             data.tagNames is list &&
+             data.tagNames.size() <= 50 &&
+             (data.tagNames.size() == 0 || data.tagNames[0] is string) &&
+             data.isDeviceLocal is bool &&
+             data.localVersion is int &&
+             data.localVersion >= 1 &&
+             (!('deletedAtMillis' in data) || data.deletedAtMillis == null || (data.deletedAtMillis is int && data.deletedAtMillis >= 0)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidCloudFolder(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 120 &&
+             (!('parentFolderId' in data) || data.parentFolderId == null || (data.parentFolderId is string && data.parentFolderId.size() <= 128)) &&
+             data.colorHex is string &&
+             data.colorHex.size() >= 4 &&
+             data.colorHex.size() <= 16 &&
+             data.iconKey is string &&
+             data.iconKey.size() >= 1 &&
+             data.iconKey.size() <= 64 &&
+             data.sortOrder is int &&
+             data.isFavorite is bool &&
+             data.isArchived is bool &&
+             (!('deletedAtMillis' in data) || data.deletedAtMillis == null || (data.deletedAtMillis is int && data.deletedAtMillis >= 0)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidCloudNote(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.itemId is string &&
+             data.itemId.size() >= 1 &&
+             data.itemId.size() <= 128 &&
+             data.body is string &&
+             data.body.size() <= 20000 &&
+             data.isPinned is bool &&
+             data.localVersion is int &&
+             data.localVersion >= 1 &&
+             (!('deletedAtMillis' in data) || data.deletedAtMillis == null || (data.deletedAtMillis is int && data.deletedAtMillis >= 0)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidCloudCollection(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 120 &&
+             (!('description' in data) || data.description == null || (data.description is string && data.description.size() <= 1000)) &&
+             data.itemIds is list &&
+             data.itemIds.size() <= 200 &&
+             (data.itemIds.size() == 0 || data.itemIds[0] is string) &&
+             (!('deletedAtMillis' in data) || data.deletedAtMillis == null || (data.deletedAtMillis is int && data.deletedAtMillis >= 0)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidWorkspacePriority(value) {
+      return value in ['HIGH', 'MEDIUM', 'LOW'];
+    }
+
+    function isValidWorkspaceNote(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 300 &&
+             data.blocksJson is string &&
+             data.blocksJson.size() <= 50000 &&
+             (!('tagsCsv' in data) || (data.tagsCsv is string && data.tagsCsv.size() <= 1000)) &&
+             data.isPinned is bool &&
+             (!('linkedItemId' in data) || data.linkedItemId == null || (data.linkedItemId is string && data.linkedItemId.size() <= 128)) &&
+             (!('audioDurationMs' in data) || (data.audioDurationMs is int && data.audioDurationMs >= 0)) &&
+             (!('deletedAtMillis' in data) || data.deletedAtMillis == null || (data.deletedAtMillis is int && data.deletedAtMillis >= 0)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidWorkspaceTask(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 300 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 5000)) &&
+             data.dueDateEpochDay is int &&
+             data.dueDateEpochDay >= 0 &&
+             data.priority is string &&
+             isValidWorkspacePriority(data.priority) &&
+             data.isCompleted is bool &&
+             (!('deletedAtMillis' in data) || data.deletedAtMillis == null || (data.deletedAtMillis is int && data.deletedAtMillis >= 0)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidSmartReminder(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.mode is string &&
+             data.mode in ['LIBRARY_CONTENT', 'PERSONAL', 'MONK_SCHEDULE'] &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 300 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 3000)) &&
+             data.priority is string &&
+             isValidWorkspacePriority(data.priority) &&
+             (!('targetItemId' in data) || data.targetItemId == null || (data.targetItemId is string && data.targetItemId.size() <= 128)) &&
+             (!('targetNoteId' in data) || data.targetNoteId == null || (data.targetNoteId is string && data.targetNoteId.size() <= 128)) &&
+             data.triggerAtMillis is int &&
+             data.triggerAtMillis >= 0 &&
+             data.recurrenceType is string &&
+             data.recurrenceType in ['ONCE', 'EVERY_2_HOURS', 'DAILY', 'WEEKLY', 'CUSTOM_MINUTES'] &&
+             (!('intervalMinutes' in data) || (data.intervalMinutes is int && data.intervalMinutes >= 0)) &&
+             (!('ringtoneTitle' in data) || (data.ringtoneTitle is string && data.ringtoneTitle.size() <= 200)) &&
+             data.isEnabled is bool &&
+             (!('deletedAtMillis' in data) || data.deletedAtMillis == null || (data.deletedAtMillis is int && data.deletedAtMillis >= 0)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidHabitRecord(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 200 &&
+             (!('subtitle' in data) || (data.subtitle is string && data.subtitle.size() <= 400)) &&
+             data.category is string &&
+             data.category.size() >= 1 &&
+             data.category.size() <= 64 &&
+             data.targetPerWeek is int &&
+             data.targetPerWeek >= 1 &&
+             data.targetPerWeek <= 7 &&
+             (!('colorHex' in data) || (data.colorHex is string && data.colorHex.size() <= 16)) &&
+             data.completedEpochDays is list &&
+             data.completedEpochDays.size() <= 366 &&
+             (!('deletedAtMillis' in data) || data.deletedAtMillis == null || (data.deletedAtMillis is int && data.deletedAtMillis >= 0)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidGamificationStats(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.totalXp is int &&
+             data.totalXp >= 0 &&
+             data.level is int &&
+             data.level >= 1 &&
+             data.rankTitle is string &&
+             data.rankTitle.size() >= 1 &&
+             data.rankTitle.size() <= 64 &&
+             data.bestStreak is int &&
+             data.bestStreak >= 0 &&
+             data.totalCompletions is int &&
+             data.totalCompletions >= 0 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidStartupProject(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 160 &&
+             (!('tagline' in data) || (data.tagline is string && data.tagline.size() <= 300)) &&
+             data.stage is string &&
+             data.stage in ['IDEATION', 'MVP', 'BETA', 'LIVE', 'SCALING'] &&
+             (!('projectType' in data) || (data.projectType is string && data.projectType in ['STARTUP', 'AGENCY', 'PRODUCT'])) &&
+             (!('targetPersona' in data) || (data.targetPersona is string && data.targetPersona.size() <= 1000)) &&
+             (!('techStack' in data) || (data.techStack is string && data.techStack.size() <= 1000)) &&
+             (!('aiPlanMarkdown' in data) || (data.aiPlanMarkdown is string && data.aiPlanMarkdown.size() <= 50000)) &&
+             data.phasesJson is string &&
+             data.phasesJson.size() <= 50000 &&
+             data.sprintTasksJson is string &&
+             data.sprintTasksJson.size() <= 50000 &&
+             (!('crmDealsJson' in data) || (data.crmDealsJson is string && data.crmDealsJson.size() <= 50000)) &&
+             (!('okrsJson' in data) || (data.okrsJson is string && data.okrsJson.size() <= 50000)) &&
+             (!('sopDocsJson' in data) || (data.sopDocsJson is string && data.sopDocsJson.size() <= 50000)) &&
+             (!('sharedTeamId' in data) || data.sharedTeamId == null || (data.sharedTeamId is string && data.sharedTeamId.size() <= 128)) &&
+             (!('deletedAtMillis' in data) || data.deletedAtMillis == null || (data.deletedAtMillis is int && data.deletedAtMillis >= 0)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidFinanceSector(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 80 &&
+             data.iconKey is string &&
+             data.iconKey.size() >= 1 &&
+             data.iconKey.size() <= 48 &&
+             data.colorHex is string &&
+             data.colorHex.size() >= 4 &&
+             data.colorHex.size() <= 16 &&
+             data.typeAffinity is string &&
+             data.typeAffinity in ['INCOME', 'EXPENSE', 'BOTH'] &&
+             data.isCustom is bool &&
+             (!('deletedAtMillis' in data) || data.deletedAtMillis == null || (data.deletedAtMillis is int && data.deletedAtMillis >= 0)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidFinanceTransaction(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.txType is string &&
+             data.txType in ['INCOME', 'EXPENSE', 'TRANSFER'] &&
+             data.amountCents is int &&
+             data.amountCents >= 0 &&
+             data.sectorId is string &&
+             data.sectorId.size() >= 1 &&
+             data.sectorId.size() <= 128 &&
+             data.sectorName is string &&
+             data.sectorName.size() >= 1 &&
+             data.sectorName.size() <= 80 &&
+             data.paymentMethod is string &&
+             data.paymentMethod in ['CASH', 'BANK', 'MOBILE_BANKING', 'CARD'] &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000)) &&
+             data.occurredAtMillis is int &&
+             data.occurredAtMillis >= 0 &&
+             (!('deletedAtMillis' in data) || data.deletedAtMillis == null || (data.deletedAtMillis is int && data.deletedAtMillis >= 0)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidTeamWorkspace(data) {
+      return data.ownerId is string &&
+             data.ownerId.size() >= 1 &&
+             data.ownerId.size() <= 128 &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 120 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 600)) &&
+             data.inviteCode is string &&
+             data.inviteCode.size() >= 4 &&
+             data.inviteCode.size() <= 32 &&
+             data.maxMembers is int &&
+             data.maxMembers >= 2 &&
+             data.maxMembers <= 100 &&
+             data.memberUids is list &&
+             data.memberUids.size() >= 1 &&
+             data.memberUids.size() <= data.maxMembers &&
+             data.memberUids[0] is string &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidTeamInvite(data) {
+      return data.teamId is string &&
+             data.teamId.size() >= 1 &&
+             data.teamId.size() <= 128 &&
+             data.teamName is string &&
+             data.teamName.size() >= 1 &&
+             data.teamName.size() <= 120 &&
+             data.ownerId is string &&
+             data.ownerId.size() >= 1 &&
+             data.ownerId.size() <= 128 &&
+             data.maxMembers is int &&
+             data.maxMembers >= 2 &&
+             data.maxMembers <= 100 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isTeamMember(teamId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/teams/$(teamId)) &&
+             request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.memberUids;
+    }
+
+    function isTeamOwner(teamId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/teams/$(teamId)) &&
+             get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId == request.auth.uid;
+    }
+
+    function isTeamAdminOrOwner(teamId) {
+      return isTeamOwner(teamId) || (
+        isTeamMember(teamId) &&
+        exists(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid)).data.role in ['OWNER', 'ADMIN']
+      );
+    }
+
+    function isInvitedRecipient(data) {
+      return isSignedIn() &&
+             ('email' in request.auth.token) &&
+             request.auth.token.email is string &&
+             data.invitedEmail == request.auth.token.email.lower();
+    }
+
+    function isValidTeamEmailInvite(data) {
+      return data.teamId is string &&
+             data.teamId.size() >= 1 &&
+             data.teamId.size() <= 128 &&
+             data.teamName is string &&
+             data.teamName.size() >= 1 &&
+             data.teamName.size() <= 120 &&
+             data.inviteCode is string &&
+             data.inviteCode.size() >= 4 &&
+             data.inviteCode.size() <= 32 &&
+             data.invitedEmail is string &&
+             data.invitedEmail.size() >= 3 &&
+             data.invitedEmail.size() <= 200 &&
+             data.invitedEmail == data.invitedEmail.lower() &&
+             data.invitedRole is string &&
+             data.invitedRole in ['ADMIN', 'MEMBER'] &&
+             (!('roleTag' in data) || (data.roleTag is string && data.roleTag.size() <= 60)) &&
+             data.invitedByUid is string &&
+             data.invitedByUid.size() >= 1 &&
+             data.invitedByUid.size() <= 128 &&
+             data.invitedByName is string &&
+             data.invitedByName.size() >= 1 &&
+             data.invitedByName.size() <= 120 &&
+             data.status is string &&
+             data.status in ['PENDING', 'ACCEPTED'] &&
+             data.createdAtMillis is int &&
+             data.createdAtMillis >= 0 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidTeamMemberDoc(data) {
+      return data.uid is string &&
+             data.uid.size() >= 1 &&
+             data.uid.size() <= 128 &&
+             data.displayName is string &&
+             data.displayName.size() >= 1 &&
+             data.displayName.size() <= 120 &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 200)) &&
+             (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 1024)) &&
+             data.role is string &&
+             data.role in ['OWNER', 'ADMIN', 'MEMBER'] &&
+             (!('roleTag' in data) || (data.roleTag is string && data.roleTag.size() <= 60)) &&
+             (!('customStatus' in data) || (data.customStatus is string && data.customStatus.size() <= 80)) &&
+             data.isOnline is bool &&
+             data.lastActiveAtMillis is int &&
+             data.lastActiveAtMillis >= 0 &&
+             (!('joinedAtMillis' in data) || (data.joinedAtMillis is int && data.joinedAtMillis >= 0)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidDayOfWeek(day) {
+      return day in ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    }
+
+    function isValidScheduleStatus(status) {
+      return status in ['backlog', 'todo', 'in_progress', 'review', 'done'];
+    }
+
+    function isValidTeamSharedTask(data) {
+      return data.teamId is string &&
+             data.teamId.size() >= 1 &&
+             data.teamId.size() <= 128 &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 240 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+             (!('assigneeUid' in data) || (data.assigneeUid is string && data.assigneeUid.size() <= 128)) &&
+             (!('assigneeName' in data) || (data.assigneeName is string && data.assigneeName.size() <= 120)) &&
+             data.priority is string &&
+             isValidWorkspacePriority(data.priority) &&
+             data.isCompleted is bool &&
+             (!('dueAtMillis' in data) || (data.dueAtMillis is int && data.dueAtMillis >= 0)) &&
+             data.createdByUid is string &&
+             data.createdByUid.size() >= 1 &&
+             data.createdByUid.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidTeamSchedule(data) {
+      return data.teamId is string &&
+             data.teamId.size() >= 1 &&
+             data.teamId.size() <= 128 &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 240 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+             data.dayOfWeek is string &&
+             isValidDayOfWeek(data.dayOfWeek) &&
+             (!('dateLabel' in data) || (data.dateLabel is string && data.dateLabel.size() <= 60)) &&
+             (!('startTime' in data) || (data.startTime is string && data.startTime.size() <= 32)) &&
+             (!('endTime' in data) || (data.endTime is string && data.endTime.size() <= 32)) &&
+             data.assignedTo is list &&
+             data.assignedTo.size() <= 50 &&
+             (!('assignedToNames' in data) || (data.assignedToNames is list && data.assignedToNames.size() <= 50)) &&
+             data.status is string &&
+             isValidScheduleStatus(data.status) &&
+             data.priority is string &&
+             isValidWorkspacePriority(data.priority) &&
+             (!('deadlineMillis' in data) || data.deadlineMillis == null || (data.deadlineMillis is int && data.deadlineMillis >= 0)) &&
+             (!('linkedDriveUrl' in data) || data.linkedDriveUrl == null || (data.linkedDriveUrl is string && data.linkedDriveUrl.size() <= 2048)) &&
+             (!('sourceBusinessId' in data) || data.sourceBusinessId == null || (data.sourceBusinessId is string && data.sourceBusinessId.size() <= 128)) &&
+             data.createdByUid is string &&
+             data.createdByUid.size() >= 1 &&
+             data.createdByUid.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidTeamSharedDoc(data) {
+      return data.teamId is string &&
+             data.teamId.size() >= 1 &&
+             data.teamId.size() <= 128 &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 240 &&
+             data.content is string &&
+             data.content.size() <= 20000 &&
+             (!('resourceUrl' in data) || (data.resourceUrl is string && data.resourceUrl.size() <= 2048)) &&
+             data.authorUid is string &&
+             data.authorUid.size() >= 1 &&
+             data.authorUid.size() <= 128 &&
+             data.authorName is string &&
+             data.authorName.size() >= 1 &&
+             data.authorName.size() <= 120 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidTeamSharedNote(data) {
+      return data.teamId is string &&
+             data.teamId.size() >= 1 &&
+             data.teamId.size() <= 128 &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 240 &&
+             data.content is string &&
+             data.content.size() <= 20000 &&
+             (!('blocksJson' in data) || (data.blocksJson is string && data.blocksJson.size() <= 50000)) &&
+             (!('tagsCsv' in data) || (data.tagsCsv is string && data.tagsCsv.size() <= 500)) &&
+             (!('resourceUrl' in data) || (data.resourceUrl is string && data.resourceUrl.size() <= 2048)) &&
+             (!('parentId' in data) || data.parentId == null || (data.parentId is string && data.parentId.size() <= 128)) &&
+             (!('icon' in data) || (data.icon is string && data.icon.size() <= 16)) &&
+             (!('isPinned' in data) || data.isPinned is bool) &&
+             data.authorUid is string &&
+             data.authorUid.size() >= 1 &&
+             data.authorUid.size() <= 128 &&
+             data.authorName is string &&
+             data.authorName.size() >= 1 &&
+             data.authorName.size() <= 120 &&
+             (!('lastEditedBy' in data) || (data.lastEditedBy is string && data.lastEditedBy.size() <= 120)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidTeamNotification(data) {
+      return data.teamId is string &&
+             data.teamId.size() >= 1 &&
+             data.teamId.size() <= 128 &&
+             data.senderUid is string &&
+             data.senderUid.size() >= 1 &&
+             data.senderUid.size() <= 128 &&
+             data.senderName is string &&
+             data.senderName.size() >= 1 &&
+             data.senderName.size() <= 120 &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 200 &&
+             data.message is string &&
+             data.message.size() >= 1 &&
+             data.message.size() <= 1000 &&
+             data.createdAtMillis is int &&
+             data.createdAtMillis >= 0 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time;
+    }
+
+    function isValidTeamNotice(data) {
+      return data.teamId is string &&
+             data.teamId.size() >= 1 &&
+             data.teamId.size() <= 128 &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 200 &&
+             data.message is string &&
+             data.message.size() >= 1 &&
+             data.message.size() <= 1000 &&
+             data.authorId is string &&
+             data.authorId.size() >= 1 &&
+             data.authorId.size() <= 128 &&
+             data.authorName is string &&
+             data.authorName.size() >= 1 &&
+             data.authorName.size() <= 120 &&
+             data.taggedUsers is list &&
+             data.taggedUsers.size() <= 50 &&
+             (!('taggedNames' in data) || (data.taggedNames is list && data.taggedNames.size() <= 50)) &&
+             (!('noticeType' in data) || (data.noticeType is string && data.noticeType in ['notice', 'poll'])) &&
+             (!('pollOptionsJson' in data) || (data.pollOptionsJson is string && data.pollOptionsJson.size() <= 10000)) &&
+             (!('pollVotesJson' in data) || (data.pollVotesJson is string && data.pollVotesJson.size() <= 20000)) &&
+             data.createdAtMillis is int &&
+             data.createdAtMillis >= 0 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time;
+    }
+
+    function isValidTeamActivity(data) {
+      return data.teamId is string &&
+             data.teamId.size() >= 1 &&
+             data.teamId.size() <= 128 &&
+             data.actorUid is string &&
+             data.actorUid.size() >= 1 &&
+             data.actorUid.size() <= 128 &&
+             data.actorName is string &&
+             data.actorName.size() >= 1 &&
+             data.actorName.size() <= 120 &&
+             data.actionType is string &&
+             data.actionType in ['PAGE', 'TASK', 'MEMBER', 'NOTICE', 'BUSINESS_SYNC', 'TEAM'] &&
+             data.summary is string &&
+             data.summary.size() >= 1 &&
+             data.summary.size() <= 500 &&
+             (!('targetId' in data) || data.targetId == null || (data.targetId is string && data.targetId.size() <= 128)) &&
+             data.createdAtMillis is int &&
+             data.createdAtMillis >= 0 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'cloudSyncEnabled', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'cloudSyncEnabled', 'themeMode', 'accentPreset', 'createdAt', 'updatedAt']) &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'cloudSyncEnabled', 'themeMode', 'accentPreset', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      match /items/{itemId} {
+        allow get: if isOwner(userId) && isValidId(itemId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(itemId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'title', 'contentType', 'sourceType', 'isFavorite',
+                           'status', 'folderIds', 'tagNames', 'isDeviceLocal',
+                           'localVersion', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'description', 'originalUrl', 'canonicalUrl',
+                           'domain', 'contentType', 'sourceType', 'thumbnailUrl', 'isFavorite',
+                           'status', 'folderIds', 'tagNames', 'isDeviceLocal', 'localVersion',
+                           'deletedAtMillis', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidCloudLibraryItem(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(itemId) &&
+                         isValidCloudLibraryItem(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'description', 'originalUrl', 'canonicalUrl', 'domain',
+                           'contentType', 'sourceType', 'thumbnailUrl', 'isFavorite', 'status',
+                           'folderIds', 'tagNames', 'isDeviceLocal', 'localVersion',
+                           'deletedAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(itemId);
+      }
+
+      match /folders/{folderId} {
+        allow get: if isOwner(userId) && isValidId(folderId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(folderId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'name', 'colorHex', 'iconKey', 'sortOrder',
+                           'isFavorite', 'isArchived', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'name', 'parentFolderId', 'colorHex', 'iconKey',
+                           'sortOrder', 'isFavorite', 'isArchived', 'deletedAtMillis',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidCloudFolder(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(folderId) &&
+                         isValidCloudFolder(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'name', 'parentFolderId', 'colorHex', 'iconKey', 'sortOrder',
+                           'isFavorite', 'isArchived', 'deletedAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(folderId);
+      }
+
+      match /notes/{noteId} {
+        allow get: if isOwner(userId) && isValidId(noteId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(noteId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'itemId', 'body', 'isPinned', 'localVersion',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'itemId', 'body', 'isPinned', 'localVersion',
+                           'deletedAtMillis', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidCloudNote(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(noteId) &&
+                         isValidCloudNote(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().itemId == existing().itemId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'body', 'isPinned', 'localVersion', 'deletedAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(noteId);
+      }
+
+      match /collections/{collectionId} {
+        allow get: if isOwner(userId) && isValidId(collectionId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(collectionId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'name', 'itemIds', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'name', 'description', 'itemIds', 'deletedAtMillis',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidCloudCollection(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(collectionId) &&
+                         isValidCloudCollection(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'name', 'description', 'itemIds', 'deletedAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(collectionId);
+      }
+
+      match /devices/{deviceId} {
+        allow get: if isOwner(userId) && isValidId(deviceId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(deviceId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'deviceName', 'platform', 'status', 'lastSeenAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'deviceName', 'platform', 'status', 'lastSeenAt'
+                         ]) &&
+                         isValidDeviceSession(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(deviceId) &&
+                         isValidDeviceSession(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'deviceName', 'platform', 'status', 'lastSeenAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(deviceId);
+      }
+
+      match /transfers/{transferId} {
+        allow get: if isOwner(userId) && isValidId(transferId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(transferId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'title', 'payloadText', 'payloadType',
+                           'fromDeviceName', 'status', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'payloadText', 'payloadType',
+                           'fromDeviceName', 'targetDeviceId', 'status', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidDeviceTransfer(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(transferId) &&
+                         isValidDeviceTransfer(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'status', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(transferId);
+      }
+
+      match /reviews/{reviewId} {
+        allow get: if isOwner(userId) && isValidId(reviewId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(reviewId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'authorName', 'rating', 'body',
+                           'helpfulCount', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'itemId', 'authorName', 'rating', 'body',
+                           'helpfulCount', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidCloudReview(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(reviewId) &&
+                         isValidCloudReview(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'rating', 'body', 'helpfulCount', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(reviewId);
+      }
+
+      match /admin_vault/{docId} {
+        allow get: if isOwner(userId) && isValidId(docId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(docId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'aiProvider', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'aiProvider', 'openRouterApiKey', 'openRouterModel',
+                           'supabaseUrl', 'supabaseAnonKey', 'customCredentialsJson',
+                           'adminPasscodeHash', 'adminPasscodeSalt', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidAdminVaultConfig(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(docId) &&
+                         isValidAdminVaultConfig(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'aiProvider', 'openRouterApiKey', 'openRouterModel',
+                           'supabaseUrl', 'supabaseAnonKey', 'customCredentialsJson',
+                           'adminPasscodeHash', 'adminPasscodeSalt', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(docId);
+      }
+
+      match /workspace_notes/{noteId} {
+        allow get: if isOwner(userId) && isValidId(noteId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(noteId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'title', 'blocksJson', 'isPinned', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'blocksJson', 'tagsCsv', 'isPinned',
+                           'linkedItemId', 'audioDurationMs', 'deletedAtMillis', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidWorkspaceNote(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(noteId) &&
+                         isValidWorkspaceNote(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'blocksJson', 'tagsCsv', 'isPinned',
+                           'linkedItemId', 'audioDurationMs', 'deletedAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(noteId);
+      }
+
+      match /workspace_tasks/{taskId} {
+        allow get: if isOwner(userId) && isValidId(taskId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(taskId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'title', 'dueDateEpochDay', 'priority', 'isCompleted', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'notes', 'dueDateEpochDay', 'priority', 'isCompleted',
+                           'deletedAtMillis', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidWorkspaceTask(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(taskId) &&
+                         isValidWorkspaceTask(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'notes', 'dueDateEpochDay', 'priority', 'isCompleted',
+                           'deletedAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(taskId);
+      }
+
+      match /reminders/{reminderId} {
+        allow get: if isOwner(userId) && isValidId(reminderId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(reminderId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'mode', 'title', 'priority', 'triggerAtMillis',
+                           'recurrenceType', 'isEnabled', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'mode', 'title', 'notes', 'priority', 'targetItemId', 'targetNoteId',
+                           'triggerAtMillis', 'recurrenceType', 'intervalMinutes', 'ringtoneTitle',
+                           'isEnabled', 'deletedAtMillis', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidSmartReminder(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(reminderId) &&
+                         isValidSmartReminder(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'mode', 'title', 'notes', 'priority', 'targetItemId', 'targetNoteId',
+                           'triggerAtMillis', 'recurrenceType', 'intervalMinutes', 'ringtoneTitle',
+                           'isEnabled', 'deletedAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(reminderId);
+      }
+
+      match /habits/{habitId} {
+        allow get: if isOwner(userId) && isValidId(habitId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(habitId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'title', 'category', 'targetPerWeek', 'completedEpochDays', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'subtitle', 'category', 'targetPerWeek', 'colorHex',
+                           'completedEpochDays', 'deletedAtMillis', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidHabitRecord(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(habitId) &&
+                         isValidHabitRecord(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'subtitle', 'category', 'targetPerWeek', 'colorHex',
+                           'completedEpochDays', 'deletedAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(habitId);
+      }
+
+      match /gamification/{docId} {
+        allow get: if isOwner(userId) && isValidId(docId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(docId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'totalXp', 'level', 'rankTitle',
+                           'bestStreak', 'totalCompletions', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'totalXp', 'level', 'rankTitle',
+                           'bestStreak', 'totalCompletions', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidGamificationStats(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(docId) &&
+                         isValidGamificationStats(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'totalXp', 'level', 'rankTitle', 'bestStreak', 'totalCompletions', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(docId);
+      }
+
+      match /startups/{startupId} {
+        allow get: if isOwner(userId) && isValidId(startupId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(startupId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'name', 'stage', 'phasesJson', 'sprintTasksJson', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'name', 'tagline', 'stage', 'projectType', 'targetPersona', 'techStack',
+                           'aiPlanMarkdown', 'phasesJson', 'sprintTasksJson', 'crmDealsJson',
+                           'okrsJson', 'sopDocsJson', 'sharedTeamId', 'deletedAtMillis',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidStartupProject(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(startupId) &&
+                         isValidStartupProject(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'name', 'tagline', 'stage', 'projectType', 'targetPersona', 'techStack',
+                           'aiPlanMarkdown', 'phasesJson', 'sprintTasksJson', 'crmDealsJson',
+                           'okrsJson', 'sopDocsJson', 'sharedTeamId', 'deletedAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(startupId);
+      }
+
+      match /finance_sectors/{sectorId} {
+        allow get: if isOwner(userId) && isValidId(sectorId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(sectorId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'name', 'iconKey', 'colorHex', 'typeAffinity', 'isCustom',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'name', 'iconKey', 'colorHex', 'typeAffinity', 'isCustom',
+                           'deletedAtMillis', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidFinanceSector(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(sectorId) &&
+                         isValidFinanceSector(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'name', 'iconKey', 'colorHex', 'typeAffinity', 'isCustom', 'deletedAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(sectorId);
+      }
+
+      match /finance_transactions/{txId} {
+        allow get: if isOwner(userId) && isValidId(txId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(txId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'txType', 'amountCents', 'sectorId', 'sectorName',
+                           'paymentMethod', 'occurredAtMillis', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'txType', 'amountCents', 'sectorId', 'sectorName',
+                           'paymentMethod', 'notes', 'occurredAtMillis', 'deletedAtMillis',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidFinanceTransaction(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(txId) &&
+                         isValidFinanceTransaction(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'txType', 'amountCents', 'sectorId', 'sectorName',
+                           'paymentMethod', 'notes', 'occurredAtMillis', 'deletedAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(txId);
+      }
+    }
+
+    match /app_config/{configId} {
+      allow get: if isSignedIn() && isValidId(configId);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(configId) &&
+                       incoming().adminUid == request.auth.uid &&
+                       incoming().keys().hasAll(['adminUid', 'aiProvider', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly([
+                         'adminUid', 'aiProvider', 'openRouterApiKey', 'openRouterModel',
+                         'supabaseUrl', 'supabaseAnonKey', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidGlobalAiConfig(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(configId) &&
+                       isValidGlobalAiConfig(incoming()) &&
+                       (existing().adminUid == request.auth.uid || isVerifiedPrimaryAdmin()) &&
+                       incoming().adminUid == existing().adminUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'aiProvider', 'openRouterApiKey', 'openRouterModel',
+                         'supabaseUrl', 'supabaseAnonKey', 'updatedAt'
+                       ]);
+
+      allow delete: if false;
+    }
+
+    match /team_invites/{inviteCode} {
+      allow get: if isSignedIn() && isValidId(inviteCode);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(inviteCode) &&
+                       incoming().ownerId == request.auth.uid &&
+                       incoming().keys().hasAll(['teamId', 'teamName', 'ownerId', 'maxMembers', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['teamId', 'teamName', 'ownerId', 'maxMembers', 'createdAt', 'updatedAt']) &&
+                       isValidTeamInvite(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(inviteCode) &&
+                       existing().ownerId == request.auth.uid &&
+                       isValidTeamInvite(incoming()) &&
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().teamId == existing().teamId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['teamName', 'maxMembers', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(inviteCode) && existing().ownerId == request.auth.uid;
+    }
+
+    match /team_email_invites/{inviteId} {
+      allow get: if isSignedIn() &&
+                    isValidId(inviteId) &&
+                    (isTeamAdminOrOwner(existing().teamId) || isInvitedRecipient(existing()));
+      allow list: if isSignedIn() && isInvitedRecipient(existing());
+      allow list: if isSignedIn() && isTeamAdminOrOwner(existing().teamId);
+
+      allow create: if isSignedIn() &&
+                       isValidId(inviteId) &&
+                       isTeamAdminOrOwner(incoming().teamId) &&
+                       incoming().invitedByUid == request.auth.uid &&
+                       incoming().status == 'PENDING' &&
+                       incoming().keys().hasAll([
+                         'teamId', 'teamName', 'inviteCode', 'invitedEmail', 'invitedRole',
+                         'invitedByUid', 'invitedByName', 'status', 'createdAtMillis', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'teamId', 'teamName', 'inviteCode', 'invitedEmail', 'invitedRole', 'roleTag',
+                         'invitedByUid', 'invitedByName', 'status', 'createdAtMillis', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidTeamEmailInvite(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(inviteId) &&
+                       isInvitedRecipient(existing()) &&
+                       isValidTeamEmailInvite(incoming()) &&
+                       incoming().teamId == existing().teamId &&
+                       incoming().invitedEmail == existing().invitedEmail &&
+                       incoming().inviteCode == existing().inviteCode &&
+                       incoming().invitedByUid == existing().invitedByUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().status == 'ACCEPTED' &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+
+      allow delete: if isSignedIn() &&
+                       isValidId(inviteId) &&
+                       (isTeamAdminOrOwner(existing().teamId) || isInvitedRecipient(existing()));
+    }
+
+    match /teams/{teamId} {
+      allow get: if isSignedIn() &&
+                    isValidId(teamId) &&
+                    (existing().ownerId == request.auth.uid || request.auth.uid in existing().memberUids);
+
+      allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(teamId) &&
+                       incoming().ownerId == request.auth.uid &&
+                       request.auth.uid in incoming().memberUids &&
+                       incoming().keys().hasAll([
+                         'ownerId', 'name', 'inviteCode', 'maxMembers', 'memberUids', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'ownerId', 'name', 'description', 'inviteCode', 'maxMembers', 'memberUids',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidTeamWorkspace(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(teamId) &&
+                       isValidTeamWorkspace(incoming()) &&
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         (
+                           existing().ownerId == request.auth.uid &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'name', 'description', 'inviteCode', 'maxMembers', 'memberUids', 'updatedAt'
+                           ])
+                         ) ||
+                         (
+                           isTeamAdminOrOwner(teamId) &&
+                           existing().ownerId in incoming().memberUids &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                         ) ||
+                         (
+                           !(request.auth.uid in existing().memberUids) &&
+                           existing().memberUids.size() < existing().maxMembers &&
+                           request.auth.uid in incoming().memberUids &&
+                           incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                           incoming().memberUids.hasAll(existing().memberUids) &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                         )
+                       );
+
+      allow delete: if isSignedIn() && isValidId(teamId) && existing().ownerId == request.auth.uid;
+
+      match /members/{memberUid} {
+        allow get: if isValidId(memberUid) && isTeamMember(teamId);
+        allow list: if isTeamMember(teamId);
+
+        allow create: if isValidId(memberUid) &&
+                         isTeamMember(teamId) &&
+                         request.auth.uid == memberUid &&
+                         incoming().uid == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'uid', 'displayName', 'role', 'isOnline', 'lastActiveAtMillis', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'uid', 'displayName', 'email', 'photoUrl', 'role', 'roleTag', 'customStatus',
+                           'isOnline', 'lastActiveAtMillis', 'joinedAtMillis', 'createdAt', 'updatedAt'
+                         ]) &&
+                         (incoming().role == 'MEMBER' || isTeamOwner(teamId)) &&
+                         isValidTeamMemberDoc(incoming());
+
+        allow update: if isValidId(memberUid) &&
+                         isTeamMember(teamId) &&
+                         (request.auth.uid == memberUid || isTeamAdminOrOwner(teamId)) &&
+                         isValidTeamMemberDoc(incoming()) &&
+                         incoming().uid == existing().uid &&
+                         incoming().createdAt == existing().createdAt &&
+                         (
+                           incoming().role == existing().role ||
+                           (
+                             isTeamAdminOrOwner(teamId) &&
+                             memberUid != get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId &&
+                             incoming().role in ['ADMIN', 'MEMBER']
+                           )
+                         ) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'displayName', 'email', 'photoUrl', 'role', 'roleTag', 'customStatus',
+                           'isOnline', 'lastActiveAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isValidId(memberUid) &&
+                         (
+                           request.auth.uid == memberUid ||
+                           (
+                             isTeamAdminOrOwner(teamId) &&
+                             memberUid != get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId
+                           )
+                         );
+      }
+
+      match /shared_tasks/{taskId} {
+        allow get: if isValidId(taskId) && isTeamMember(teamId);
+        allow list: if isTeamMember(teamId);
+
+        allow create: if isValidId(taskId) &&
+                         isTeamMember(teamId) &&
+                         incoming().teamId == teamId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'teamId', 'title', 'priority', 'isCompleted', 'createdByUid', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'teamId', 'title', 'description', 'assigneeUid', 'assigneeName',
+                           'priority', 'isCompleted', 'dueAtMillis', 'createdByUid', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidTeamSharedTask(incoming());
+
+        allow update: if isValidId(taskId) &&
+                         isTeamMember(teamId) &&
+                         isValidTeamSharedTask(incoming()) &&
+                         incoming().teamId == existing().teamId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'description', 'assigneeUid', 'assigneeName',
+                           'priority', 'isCompleted', 'dueAtMillis', 'updatedAt'
+                         ]);
+
+        allow delete: if isValidId(taskId) && isTeamMember(teamId);
+      }
+
+      match /schedules/{taskId} {
+        allow get: if isValidId(taskId) && isTeamMember(teamId);
+        allow list: if isTeamMember(teamId);
+
+        allow create: if isValidId(taskId) &&
+                         isTeamMember(teamId) &&
+                         incoming().teamId == teamId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'teamId', 'title', 'dayOfWeek', 'assignedTo', 'status',
+                           'priority', 'createdByUid', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'teamId', 'title', 'description', 'dayOfWeek', 'dateLabel',
+                           'startTime', 'endTime', 'assignedTo', 'assignedToNames',
+                           'status', 'priority', 'deadlineMillis', 'linkedDriveUrl',
+                           'sourceBusinessId', 'createdByUid', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidTeamSchedule(incoming());
+
+        allow update: if isValidId(taskId) &&
+                         isTeamMember(teamId) &&
+                         isValidTeamSchedule(incoming()) &&
+                         incoming().teamId == existing().teamId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'description', 'dayOfWeek', 'dateLabel', 'startTime', 'endTime',
+                           'assignedTo', 'assignedToNames', 'status', 'priority',
+                           'deadlineMillis', 'linkedDriveUrl', 'sourceBusinessId', 'updatedAt'
+                         ]);
+
+        allow delete: if isValidId(taskId) && isTeamMember(teamId);
+      }
+
+      match /shared_docs/{docId} {
+        allow get: if isValidId(docId) && isTeamMember(teamId);
+        allow list: if isTeamMember(teamId);
+
+        allow create: if isValidId(docId) &&
+                         isTeamMember(teamId) &&
+                         incoming().teamId == teamId &&
+                         incoming().authorUid == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'teamId', 'title', 'content', 'authorUid', 'authorName', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'teamId', 'title', 'content', 'resourceUrl', 'authorUid', 'authorName',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidTeamSharedDoc(incoming());
+
+        allow update: if isValidId(docId) &&
+                         isTeamMember(teamId) &&
+                         isValidTeamSharedDoc(incoming()) &&
+                         incoming().teamId == existing().teamId &&
+                         incoming().authorUid == existing().authorUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'content', 'resourceUrl', 'authorName', 'updatedAt'
+                         ]);
+
+        allow delete: if isValidId(docId) && isTeamMember(teamId);
+      }
+
+      match /shared_notes/{noteId} {
+        allow get: if isValidId(noteId) && isTeamMember(teamId);
+        allow list: if isTeamMember(teamId);
+
+        allow create: if isValidId(noteId) &&
+                         isTeamMember(teamId) &&
+                         incoming().teamId == teamId &&
+                         incoming().authorUid == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'teamId', 'title', 'content', 'authorUid', 'authorName', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'teamId', 'title', 'content', 'blocksJson', 'tagsCsv', 'resourceUrl',
+                           'parentId', 'icon', 'isPinned',
+                           'authorUid', 'authorName', 'lastEditedBy', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidTeamSharedNote(incoming());
+
+        allow update: if isValidId(noteId) &&
+                         isTeamMember(teamId) &&
+                         isValidTeamSharedNote(incoming()) &&
+                         incoming().teamId == existing().teamId &&
+                         incoming().authorUid == existing().authorUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'content', 'blocksJson', 'tagsCsv', 'resourceUrl',
+                           'parentId', 'icon', 'isPinned',
+                           'lastEditedBy', 'updatedAt'
+                         ]);
+
+        allow delete: if isValidId(noteId) && isTeamMember(teamId);
+      }
+
+      match /notifications/{notifId} {
+        allow get: if isValidId(notifId) && isTeamMember(teamId);
+        allow list: if isTeamMember(teamId);
+
+        allow create: if isValidId(notifId) &&
+                         isTeamMember(teamId) &&
+                         incoming().teamId == teamId &&
+                         incoming().senderUid == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'teamId', 'senderUid', 'senderName', 'title', 'message',
+                           'createdAtMillis', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'teamId', 'senderUid', 'senderName', 'title', 'message',
+                           'createdAtMillis', 'createdAt'
+                         ]) &&
+                         isValidTeamNotification(incoming());
+
+        allow update: if false;
+
+        allow delete: if isValidId(notifId) &&
+                         (isTeamAdminOrOwner(teamId) || existing().senderUid == request.auth.uid);
+      }
+
+      match /notices/{noticeId} {
+        allow get: if isValidId(noticeId) && isTeamMember(teamId);
+        allow list: if isTeamMember(teamId);
+
+        allow create: if isValidId(noticeId) &&
+                         isTeamMember(teamId) &&
+                         incoming().teamId == teamId &&
+                         incoming().authorId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'teamId', 'title', 'message', 'authorId', 'authorName',
+                           'taggedUsers', 'createdAtMillis', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'teamId', 'title', 'message', 'authorId', 'authorName',
+                           'taggedUsers', 'taggedNames', 'noticeType', 'pollOptionsJson', 'pollVotesJson',
+                           'createdAtMillis', 'createdAt'
+                         ]) &&
+                         isValidTeamNotice(incoming());
+
+        allow update: if isValidId(noticeId) &&
+                         isTeamMember(teamId) &&
+                         ('noticeType' in existing()) &&
+                         existing().noticeType == 'poll' &&
+                         isValidTeamNotice(incoming()) &&
+                         incoming().teamId == existing().teamId &&
+                         incoming().authorId == existing().authorId &&
+                         incoming().createdAtMillis == existing().createdAtMillis &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['pollVotesJson']);
+
+        allow delete: if isValidId(noticeId) &&
+                         (isTeamAdminOrOwner(teamId) || existing().authorId == request.auth.uid);
+      }
+
+      match /activity/{activityId} {
+        allow get: if isValidId(activityId) && isTeamMember(teamId);
+        allow list: if isTeamMember(teamId);
+
+        allow create: if isValidId(activityId) &&
+                         isTeamMember(teamId) &&
+                         incoming().teamId == teamId &&
+                         incoming().actorUid == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'teamId', 'actorUid', 'actorName', 'actionType', 'summary',
+                           'createdAtMillis', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'teamId', 'actorUid', 'actorName', 'actionType', 'summary',
+                           'targetId', 'createdAtMillis', 'createdAt'
+                         ]) &&
+                         isValidTeamActivity(incoming());
+
+        allow update: if false;
+
+        allow delete: if isValidId(activityId) && isTeamAdminOrOwner(teamId);
+      }
+    }
+  }
+}

@@ -1,0 +1,656 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user cloud library profile and sync preferences.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "cloudSyncEnabled": { "type": "boolean", "description": "Opt-in cloud metadata sync toggle" },
+        "themeMode": { "type": "string", "enum": ["LIGHT", "DIM", "NIGHT", "DARK"], "description": "Synced Liquid Glass theme preference" },
+        "accentPreset": { "type": "string", "description": "Curated Liquid Glass accent preset" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update" }
+      },
+      "required": ["userId", "displayName", "cloudSyncEnabled", "createdAt", "updatedAt"]
+    },
+    "CloudLibraryItem": {
+      "title": "CloudLibraryItem",
+      "description": "Synced metadata record for a saved URL, note, or device-local file reference.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "title": { "type": "string", "description": "Item title" },
+        "description": { "type": "string", "description": "Item description or AI summary" },
+        "originalUrl": { "type": "string", "description": "Original saved URL" },
+        "canonicalUrl": { "type": "string", "description": "Normalized canonical URL for duplicate detection" },
+        "domain": { "type": "string", "description": "Source host domain" },
+        "contentType": { "type": "string", "enum": ["link", "video", "github", "article", "document", "image", "note", "local_file"] },
+        "sourceType": { "type": "string", "enum": ["youtube", "github", "web", "saf_file", "photo_picker", "note", "share_intent", "manual"] },
+        "thumbnailUrl": { "type": "string", "description": "Optional remote thumbnail URL" },
+        "isFavorite": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["unsorted", "processing", "needs_review", "failed_metadata", "duplicate_candidate", "organized", "archived"] },
+        "folderIds": { "type": "array", "description": "Associated folder IDs" },
+        "tagNames": { "type": "array", "description": "Associated tag names" },
+        "isDeviceLocal": { "type": "boolean", "description": "True when referring to a device-local SAF/MediaStore URI" },
+        "localVersion": { "type": "integer", "description": "Monotonic client edit version" },
+        "deletedAtMillis": { "type": "integer", "description": "Tombstone deletion timestamp in epoch ms" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "contentType", "sourceType", "isFavorite", "status", "folderIds", "tagNames", "isDeviceLocal", "localVersion", "createdAt", "updatedAt"]
+    },
+    "CloudFolder": {
+      "title": "CloudFolder",
+      "description": "Hierarchical library folder.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "parentFolderId": { "type": "string" },
+        "colorHex": { "type": "string" },
+        "iconKey": { "type": "string" },
+        "sortOrder": { "type": "integer" },
+        "isFavorite": { "type": "boolean" },
+        "isArchived": { "type": "boolean" },
+        "deletedAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "colorHex", "iconKey", "sortOrder", "isFavorite", "isArchived", "createdAt", "updatedAt"]
+    },
+    "CloudNote": {
+      "title": "CloudNote",
+      "description": "User-authored note attached to a library item.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "itemId": { "type": "string" },
+        "body": { "type": "string" },
+        "isPinned": { "type": "boolean" },
+        "localVersion": { "type": "integer" },
+        "deletedAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "itemId", "body", "isPinned", "localVersion", "createdAt", "updatedAt"]
+    },
+    "CloudCollection": {
+      "title": "CloudCollection",
+      "description": "Curated cross-folder collection.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "itemIds": { "type": "array" },
+        "deletedAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "itemIds", "createdAt", "updatedAt"]
+    },
+    "CloudDeviceSession": {
+      "title": "CloudDeviceSession",
+      "description": "Connected phone, tablet, or PC workspace session for real-time cross-device sync.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "deviceId": { "type": "string" },
+        "deviceName": { "type": "string" },
+        "platform": { "type": "string", "enum": ["android", "desktop", "web", "tablet"] },
+        "isOnline": { "type": "boolean" },
+        "lastSeenAtMillis": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "deviceId", "deviceName", "platform", "isOnline", "lastSeenAtMillis"]
+    },
+    "CloudDeviceTransfer": {
+      "title": "CloudDeviceTransfer",
+      "description": "Cross-device item handoff payload between connected devices.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "targetDeviceId": { "type": "string" },
+        "targetDeviceName": { "type": "string" },
+        "sourceDeviceId": { "type": "string" },
+        "sourceDeviceName": { "type": "string" },
+        "itemId": { "type": "string" },
+        "itemTitle": { "type": "string" },
+        "itemUrl": { "type": "string" },
+        "contentType": { "type": "string" },
+        "status": { "type": "string", "enum": ["sent", "received", "dismissed"] },
+        "createdAtMillis": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "targetDeviceId", "sourceDeviceId", "itemTitle", "status", "createdAtMillis"]
+    },
+    "CloudReview": {
+      "title": "CloudReview",
+      "description": "User review and rating record synced across devices.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "rating": { "type": "integer" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "helpfulCount": { "type": "integer" },
+        "createdAtMillis": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "authorName", "rating", "title", "body", "helpfulCount", "createdAtMillis"]
+    },
+    "AdminVaultConfig": {
+      "title": "AdminVaultConfig",
+      "description": "Dynamic runtime API keys, provider selection, and admin passcode digest synced securely per owner.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "aiProvider": { "type": "string", "enum": ["firebase_ai", "openrouter"] },
+        "openRouterApiKey": { "type": "string" },
+        "openRouterModel": { "type": "string" },
+        "supabaseUrl": { "type": "string" },
+        "supabaseAnonKey": { "type": "string" },
+        "customCredentialsJson": { "type": "string" },
+        "adminPasscodeHash": { "type": "string" },
+        "adminPasscodeSalt": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "aiProvider", "createdAt", "updatedAt"]
+    },
+    "GlobalAiRuntimeConfig": {
+      "title": "GlobalAiRuntimeConfig",
+      "description": "Shared runtime AI provider, free OpenRouter model, and dynamic key synced from Admin Panel to all authenticated mobile apps.",
+      "type": "object",
+      "properties": {
+        "adminUid": { "type": "string", "description": "Immutable Firebase Auth UID of the administrator who initialized this config" },
+        "aiProvider": { "type": "string", "enum": ["firebase_ai", "openrouter"] },
+        "openRouterApiKey": { "type": "string" },
+        "openRouterModel": { "type": "string" },
+        "supabaseUrl": { "type": "string" },
+        "supabaseAnonKey": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["adminUid", "aiProvider", "createdAt", "updatedAt"]
+    },
+    "WorkspaceNote": {
+      "title": "WorkspaceNote",
+      "description": "Cloud-synced Notion-style block note belonging to the authenticated owner.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "blocksJson": { "type": "string" },
+        "tagsCsv": { "type": "string" },
+        "isPinned": { "type": "boolean" },
+        "linkedItemId": { "type": "string" },
+        "audioDurationMs": { "type": "integer" },
+        "deletedAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "blocksJson", "isPinned", "createdAt", "updatedAt"]
+    },
+    "WorkspaceTask": {
+      "title": "WorkspaceTask",
+      "description": "Cloud-synced daily To-Do task for Today, Tomorrow, or Upcoming plans.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "notes": { "type": "string" },
+        "dueDateEpochDay": { "type": "integer" },
+        "priority": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "isCompleted": { "type": "boolean" },
+        "deletedAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "dueDateEpochDay", "priority", "isCompleted", "createdAt", "updatedAt"]
+    },
+    "SmartReminderRecord": {
+      "title": "SmartReminderRecord",
+      "description": "Cloud-synced smart reminder metadata.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "mode": { "type": "string", "enum": ["LIBRARY_CONTENT", "PERSONAL", "MONK_SCHEDULE"] },
+        "title": { "type": "string" },
+        "notes": { "type": "string" },
+        "priority": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "targetItemId": { "type": "string" },
+        "targetNoteId": { "type": "string" },
+        "triggerAtMillis": { "type": "integer" },
+        "recurrenceType": { "type": "string" },
+        "intervalMinutes": { "type": "integer" },
+        "ringtoneTitle": { "type": "string" },
+        "isEnabled": { "type": "boolean" },
+        "deletedAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "mode", "title", "priority", "triggerAtMillis", "recurrenceType", "isEnabled", "createdAt", "updatedAt"]
+    },
+    "HabitRecord": {
+      "title": "HabitRecord",
+      "description": "Cloud-synced habit and completion epoch days.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "category": { "type": "string" },
+        "targetPerWeek": { "type": "integer" },
+        "colorHex": { "type": "string" },
+        "completedEpochDays": { "type": "array" },
+        "deletedAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "category", "targetPerWeek", "completedEpochDays", "createdAt", "updatedAt"]
+    },
+    "GamificationStats": {
+      "title": "GamificationStats",
+      "description": "Cloud-synced XP, level, rank, and best streak statistics.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "totalXp": { "type": "integer" },
+        "level": { "type": "integer" },
+        "rankTitle": { "type": "string" },
+        "bestStreak": { "type": "integer" },
+        "totalCompletions": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "totalXp", "level", "rankTitle", "bestStreak", "totalCompletions", "createdAt", "updatedAt"]
+    },
+    "StartupProjectRecord": {
+      "title": "StartupProjectRecord",
+      "description": "Cloud-synced Startup & Business Builder OS venture, 6-phase roadmap, Kanban sprint, CRM deals, OKRs, and SOPs.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "tagline": { "type": "string" },
+        "stage": { "type": "string", "enum": ["IDEATION", "MVP", "BETA", "LIVE", "SCALING"] },
+        "projectType": { "type": "string", "enum": ["STARTUP", "AGENCY", "PRODUCT"] },
+        "targetPersona": { "type": "string" },
+        "techStack": { "type": "string" },
+        "aiPlanMarkdown": { "type": "string" },
+        "phasesJson": { "type": "string" },
+        "sprintTasksJson": { "type": "string" },
+        "crmDealsJson": { "type": "string" },
+        "okrsJson": { "type": "string" },
+        "sopDocsJson": { "type": "string" },
+        "sharedTeamId": { "type": "string" },
+        "deletedAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "stage", "phasesJson", "sprintTasksJson", "createdAt", "updatedAt"]
+    },
+    "FinanceSectorRecord": {
+      "title": "FinanceSectorRecord",
+      "description": "Default and user-created custom finance category/sector.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "iconKey": { "type": "string" },
+        "colorHex": { "type": "string" },
+        "typeAffinity": { "type": "string", "enum": ["INCOME", "EXPENSE", "BOTH"] },
+        "isCustom": { "type": "boolean" },
+        "deletedAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "iconKey", "colorHex", "typeAffinity", "isCustom", "createdAt", "updatedAt"]
+    },
+    "FinanceTransactionRecord": {
+      "title": "FinanceTransactionRecord",
+      "description": "Income, expense, or transfer ledger entry linked to a finance sector.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "txType": { "type": "string", "enum": ["INCOME", "EXPENSE", "TRANSFER"] },
+        "amountCents": { "type": "integer" },
+        "sectorId": { "type": "string" },
+        "sectorName": { "type": "string" },
+        "paymentMethod": { "type": "string", "enum": ["CASH", "BANK", "MOBILE_BANKING", "CARD"] },
+        "notes": { "type": "string" },
+        "occurredAtMillis": { "type": "integer" },
+        "deletedAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "txType", "amountCents", "sectorId", "sectorName", "paymentMethod", "occurredAtMillis", "createdAt", "updatedAt"]
+    },
+    "TeamWorkspaceRecord": {
+      "title": "TeamWorkspaceRecord",
+      "description": "Collaborative multi-member team workspace.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "inviteCode": { "type": "string" },
+        "maxMembers": { "type": "integer" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "name", "inviteCode", "maxMembers", "memberUids", "createdAt", "updatedAt"]
+    },
+    "TeamInviteLookup": {
+      "title": "TeamInviteLookup",
+      "description": "Direct get-only lookup mapping an invite code to a team workspace.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string" },
+        "teamName": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "maxMembers": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teamId", "teamName", "ownerId", "maxMembers", "createdAt", "updatedAt"]
+    },
+    "TeamEmailInviteRecord": {
+      "title": "TeamEmailInviteRecord",
+      "description": "Direct Gmail invite allowing team owners/admins to invite collaborators by email.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string" },
+        "teamName": { "type": "string" },
+        "inviteCode": { "type": "string" },
+        "invitedEmail": { "type": "string" },
+        "invitedRole": { "type": "string", "enum": ["ADMIN", "MEMBER"] },
+        "roleTag": { "type": "string" },
+        "invitedByUid": { "type": "string" },
+        "invitedByName": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "ACCEPTED"] },
+        "createdAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teamId", "teamName", "inviteCode", "invitedEmail", "invitedRole", "invitedByUid", "invitedByName", "status", "createdAtMillis", "createdAt", "updatedAt"]
+    },
+    "TeamMemberRecord": {
+      "title": "TeamMemberRecord",
+      "description": "Active member profile, role, custom role/status tag, and presence inside a team.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "role": { "type": "string", "enum": ["OWNER", "ADMIN", "MEMBER"] },
+        "roleTag": { "type": "string" },
+        "customStatus": { "type": "string" },
+        "isOnline": { "type": "boolean" },
+        "lastActiveAtMillis": { "type": "integer" },
+        "joinedAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "role", "isOnline", "lastActiveAtMillis", "createdAt", "updatedAt"]
+    },
+    "TeamSharedTaskRecord": {
+      "title": "TeamSharedTaskRecord",
+      "description": "Assigned collaborative task synced across team members.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "assigneeUid": { "type": "string" },
+        "assigneeName": { "type": "string" },
+        "priority": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "isCompleted": { "type": "boolean" },
+        "dueAtMillis": { "type": "integer" },
+        "createdByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teamId", "title", "priority", "isCompleted", "createdByUid", "createdAt", "updatedAt"]
+    },
+    "TeamScheduleRecord": {
+      "title": "TeamScheduleRecord",
+      "description": "Collaborative team task with 5-stage Kanban, day-by-day scheduler, deadlines, Drive links, and Business OS source tracking.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "dayOfWeek": { "type": "string", "enum": ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"] },
+        "dateLabel": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "assignedTo": { "type": "array", "items": { "type": "string" } },
+        "assignedToNames": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["backlog", "todo", "in_progress", "review", "done"] },
+        "priority": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "deadlineMillis": { "type": "integer" },
+        "linkedDriveUrl": { "type": "string" },
+        "sourceBusinessId": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teamId", "title", "dayOfWeek", "assignedTo", "status", "priority", "createdByUid", "createdAt", "updatedAt"]
+    },
+    "TeamSharedDocRecord": {
+      "title": "TeamSharedDocRecord",
+      "description": "Shared note or research link inside a team.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "resourceUrl": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teamId", "title", "content", "authorUid", "authorName", "createdAt", "updatedAt"]
+    },
+    "TeamSharedNoteRecord": {
+      "title": "TeamSharedNoteRecord",
+      "description": "Collaborative Notion-style nested shared page with structured slash blocks, icon, pinning, and attribution.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "blocksJson": { "type": "string" },
+        "tagsCsv": { "type": "string" },
+        "resourceUrl": { "type": "string" },
+        "parentId": { "type": "string" },
+        "icon": { "type": "string" },
+        "isPinned": { "type": "boolean" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "lastEditedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teamId", "title", "content", "authorUid", "authorName", "createdAt", "updatedAt"]
+    },
+    "TeamNotificationRecord": {
+      "title": "TeamNotificationRecord",
+      "description": "Real-time team ping or update notification delivered across member devices.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "senderName": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teamId", "senderUid", "senderName", "title", "message", "createdAtMillis", "createdAt"]
+    },
+    "TeamNoticeRecord": {
+      "title": "TeamNoticeRecord",
+      "description": "Team notice board post or interactive poll with @Member tagging.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "taggedUsers": { "type": "array", "items": { "type": "string" } },
+        "taggedNames": { "type": "array", "items": { "type": "string" } },
+        "noticeType": { "type": "string", "enum": ["notice", "poll"] },
+        "pollOptionsJson": { "type": "string" },
+        "pollVotesJson": { "type": "string" },
+        "createdAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teamId", "title", "message", "authorId", "authorName", "taggedUsers", "createdAtMillis", "createdAt"]
+    },
+    "TeamActivityRecord": {
+      "title": "TeamActivityRecord",
+      "description": "Chronological real-time team audit log for pages, tasks, members, notices, and Business OS shares.",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string" },
+        "actorUid": { "type": "string" },
+        "actorName": { "type": "string" },
+        "actionType": { "type": "string", "enum": ["PAGE", "TASK", "MEMBER", "NOTICE", "BUSINESS_SYNC", "TEAM"] },
+        "summary": { "type": "string" },
+        "targetId": { "type": "string" },
+        "createdAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teamId", "actorUid", "actorName", "actionType", "summary", "createdAtMillis", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile and cloud sync opt-in state."
+    },
+    "/users/{userId}/items/{itemId}": {
+      "schema": { "$ref": "#/entities/CloudLibraryItem" },
+      "description": "Synced library item metadata owned by the user."
+    },
+    "/users/{userId}/folders/{folderId}": {
+      "schema": { "$ref": "#/entities/CloudFolder" },
+      "description": "Synced folder hierarchy owned by the user."
+    },
+    "/users/{userId}/notes/{noteId}": {
+      "schema": { "$ref": "#/entities/CloudNote" },
+      "description": "Synced notes attached to library items owned by the user."
+    },
+    "/users/{userId}/collections/{collectionId}": {
+      "schema": { "$ref": "#/entities/CloudCollection" },
+      "description": "Synced curated collections owned by the user."
+    },
+    "/users/{userId}/devices/{deviceId}": {
+      "schema": { "$ref": "#/entities/CloudDeviceSession" },
+      "description": "Connected device sessions for real-time sync."
+    },
+    "/users/{userId}/transfers/{transferId}": {
+      "schema": { "$ref": "#/entities/CloudDeviceTransfer" },
+      "description": "Cross-device item transfers."
+    },
+    "/users/{userId}/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/CloudReview" },
+      "description": "User reviews synced across devices."
+    },
+    "/users/{userId}/admin_vault/{docId}": {
+      "schema": { "$ref": "#/entities/AdminVaultConfig" },
+      "description": "Owner-isolated runtime API keys and admin vault config."
+    },
+    "/users/{userId}/workspace_notes/{noteId}": {
+      "schema": { "$ref": "#/entities/WorkspaceNote" },
+      "description": "Cloud-synced Notion-style workspace notes owned by the user."
+    },
+    "/users/{userId}/workspace_tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/WorkspaceTask" },
+      "description": "Cloud-synced workspace to-do tasks owned by the user."
+    },
+    "/users/{userId}/reminders/{reminderId}": {
+      "schema": { "$ref": "#/entities/SmartReminderRecord" },
+      "description": "Cloud-synced smart reminders owned by the user."
+    },
+    "/users/{userId}/habits/{habitId}": {
+      "schema": { "$ref": "#/entities/HabitRecord" },
+      "description": "Cloud-synced habits and completion days owned by the user."
+    },
+    "/users/{userId}/gamification/{docId}": {
+      "schema": { "$ref": "#/entities/GamificationStats" },
+      "description": "Cloud-synced habit XP, level, and streak stats owned by the user."
+    },
+    "/users/{userId}/startups/{startupId}": {
+      "schema": { "$ref": "#/entities/StartupProjectRecord" },
+      "description": "Cloud-synced Startup & Business Builder OS projects."
+    },
+    "/users/{userId}/finance_sectors/{sectorId}": {
+      "schema": { "$ref": "#/entities/FinanceSectorRecord" },
+      "description": "Cloud-synced default and custom money ledger sectors."
+    },
+    "/users/{userId}/finance_transactions/{txId}": {
+      "schema": { "$ref": "#/entities/FinanceTransactionRecord" },
+      "description": "Cloud-synced money ledger transactions."
+    },
+    "/app_config/{configId}": {
+      "schema": { "$ref": "#/entities/GlobalAiRuntimeConfig" },
+      "description": "Shared authenticated-read, admin-write runtime API configuration propagated to all mobile clients."
+    },
+    "/teams/{teamId}": {
+      "schema": { "$ref": "#/entities/TeamWorkspaceRecord" },
+      "description": "Real-time collaborative team workspace."
+    },
+    "/team_invites/{inviteCode}": {
+      "schema": { "$ref": "#/entities/TeamInviteLookup" },
+      "description": "Non-enumerable lookup code resolving a team invite to teamId."
+    },
+    "/team_email_invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/TeamEmailInviteRecord" },
+      "description": "Direct Gmail invite records readable by team admins or the invited email recipient."
+    },
+    "/teams/{teamId}/members/{memberUid}": {
+      "schema": { "$ref": "#/entities/TeamMemberRecord" },
+      "description": "Team member profiles and online presence."
+    },
+    "/teams/{teamId}/shared_tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/TeamSharedTaskRecord" },
+      "description": "Assigned shared sprint tasks within a team."
+    },
+    "/teams/{teamId}/schedules/{taskId}": {
+      "schema": { "$ref": "#/entities/TeamScheduleRecord" },
+      "description": "Collaborative Kanban, scheduler, and table tasks within a team."
+    },
+    "/teams/{teamId}/shared_docs/{docId}": {
+      "schema": { "$ref": "#/entities/TeamSharedDocRecord" },
+      "description": "Shared research notes and URLs within a team."
+    },
+    "/teams/{teamId}/shared_notes/{noteId}": {
+      "schema": { "$ref": "#/entities/TeamSharedNoteRecord" },
+      "description": "Collaborative Notion-style nested pages within a team."
+    },
+    "/teams/{teamId}/notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/TeamNotificationRecord" },
+      "description": "Real-time team alert notifications."
+    },
+    "/teams/{teamId}/notices/{noticeId}": {
+      "schema": { "$ref": "#/entities/TeamNoticeRecord" },
+      "description": "Team notice board alerts and interactive polls."
+    },
+    "/teams/{teamId}/activity/{activityId}": {
+      "schema": { "$ref": "#/entities/TeamActivityRecord" },
+      "description": "Live chronological activity feed and audit log for team workspaces."
+    }
+  }
+}
+

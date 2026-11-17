@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">AI Library</string>
+    <string name="monk_accessibility_description">Detects when a blocked app opens during an active Monk Mode focus session or scheduled block window so AI Library can display your Focus Shield.</string>
+    <string name="monk_service_notification_channel">Monk Mode Focus Shield</string>
+    <string name="reminder_notification_channel">Smart Library &amp; Life Reminders</string>
+</resources>
